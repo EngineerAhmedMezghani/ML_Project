@@ -110,67 +110,76 @@ def load_and_process_data():
     df.drop(columns=["MonetaryTotal", "Recency", "Frequency", "CustomerTenureDays"], inplace=True)
 
 
-    print("----------------LastLoginIP GeoIP preprocessing------------------")
-    def ip_to_int(ip):
-        try:
-            return int(ipaddress.IPv4Address(ip))
-        except:
-            return None
+    # print("----------------GeoIP Numeric Feature Engineering------------------")
+
+    # import ipaddress
+
+    # def ip_to_int(ip):
+    #     try:
+    #         return int(ipaddress.IPv4Address(ip))
+    #     except:
+    #         return None
 
 
-    def cidr_to_range(cidr):
-        net = ipaddress.ip_network(cidr, strict=False)
-        return int(net.network_address), int(net.broadcast_address)
-    print("----------------GeoIP Country Mapping (CSV version)------------------")
-
-    # Load GeoLite CSV files
-    blocks = pd.read_csv("data/external/GeoLite2-Country-Blocks-IPv4.csv")
-    locations = pd.read_csv("data/external/GeoLite2-Country-Locations-en.csv")
-
-    # Keep only necessary columns
-    blocks = blocks[["network", "geoname_id"]]
-    locations = locations[["geoname_id", "country_iso_code"]]
-
-    # Merge datasets
-    geo_df = blocks.merge(locations, on="geoname_id", how="left")
-
-    # Convert CIDR → IP range
-    geo_df["ip_start"] = geo_df["network"].apply(lambda x: cidr_to_range(x)[0])
-    geo_df["ip_end"] = geo_df["network"].apply(lambda x: cidr_to_range(x)[1])
-
-    print("GeoIP dataset loaded:", geo_df.shape)
+    # def cidr_to_range(cidr):
+    #     net = ipaddress.ip_network(cidr, strict=False)
+    #     return int(net.network_address), int(net.broadcast_address)
 
 
-    # Function to map IP → country
-    def get_country(ip):
-        ip_int = ip_to_int(ip)
-        if ip_int is None:
-            return "UNK"
+    # # Load datasets
+    # blocks = pd.read_csv("data/external/GeoLite2-Country-Blocks-IPv4.csv")
+    # locations = pd.read_csv("data/external/GeoLite2-Country-Locations-en.csv")
 
-        match = geo_df[(geo_df["ip_start"] <= ip_int) & (geo_df["ip_end"] >= ip_int)]
+    # # Keep only needed columns
+    # blocks = blocks[["network", "geoname_id"]]
+    # locations = locations[["geoname_id", "country_iso_code"]]
 
-        if match.empty:
-            return "UNK"
+    # # Merge
+    # geo_df = blocks.merge(locations, on="geoname_id", how="left")
 
-        return match.iloc[0]["country_iso_code"]
+    # # Convert CIDR → range
+    # geo_df["ip_start"] = geo_df["network"].apply(lambda x: cidr_to_range(x)[0])
+    # geo_df["ip_end"] = geo_df["network"].apply(lambda x: cidr_to_range(x)[1])
 
 
-    # Apply mapping
-    df["Country"] = df["LastLoginIP"].apply(get_country)
+    # def get_country(ip):
+    #     ip_int = ip_to_int(ip)
+    #     if ip_int is None:
+    #         return "UNK"
 
-    # Encode country (ML friendly)
-    df["Country"] = df["Country"].astype("category")
-    df["Country_encoded"] = df["Country"].cat.codes
+    #     match = geo_df[(geo_df["ip_start"] <= ip_int) & (geo_df["ip_end"] >= ip_int)]
 
-    # Frequency encoding (VERY useful feature)
-    country_freq = df["Country"].value_counts(normalize=True)
-    df["Country_freq"] = df["Country"].map(country_freq)
+    #     if match.empty:
+    #         return "UNK"
 
-    # Drop original column
-    df.drop(columns=["LastLoginIP", "Country"], inplace=True)
+    #     return match.iloc[0]["country_iso_code"]
 
-    print("Country feature engineering done")
-    print(df[["Country_encoded", "Country_freq"]].head())
+
+    # # Map IP → country code
+    # df["Country"] = df["LastLoginIP"].apply(get_country)
+
+    # # Convert directly to numeric features
+    # df["Country"] = df["Country"].astype("category")
+    # df["Country_encoded"] = df["Country"].cat.codes
+
+    # country_freq = df["Country"].value_counts(normalize=True)
+    # df["Country_freq"] = df["Country"].map(country_freq)
+
+    # # FINAL CLEANUP → remove redundancy
+    # df.drop(columns=["LastLoginIP", "Country"], inplace=True)
+
+    # print("Final numeric features added successfully")
+    # print(df[["Country_encoded", "Country_freq"]].head())
+
+    print("----------------Class imbalance check------------------")
+
+    print("Churn distribution:")
+    print(df["Churn"].value_counts(normalize=True))
+
+    print("\nAccountStatus distribution:")
+    print(df["AccountStatus"].value_counts(normalize=True))
+    #we will drop the account status column
+    df.drop(columns=["AccountStatus"], inplace=True)
 
 
     return df
