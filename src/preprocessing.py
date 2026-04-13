@@ -6,8 +6,6 @@ def load_and_process_data():
     df=pd.read_csv("data/raw/retail_customers_COMPLETE_CATEGORICAL.csv")
         
     print("---------------- exploring the data... ----------------\n")
-    
-    df=pd.read_csv("data/raw/retail_customers_COMPLETE_CATEGORICAL.csv")
 
     print(df.head())
     for col in df.columns:
@@ -244,16 +242,88 @@ def load_and_process_data():
         "ProductDiversity",
         "RFMSegment"
     ]
-    le_dict = {}
-
     for col in label_cols:
-        df[col] = df[col].astype(str)  # safety step
+        print(f"{col} value counts:",df[col].value_counts())
 
-        le = LabelEncoder()
-        df[col] = le.fit_transform(df[col])
+    print("--------------MANUAL ENCODING (ordered features)--------------")
 
-        le_dict[col] = le  # store encoders for future use
+    # 1. LoyaltyLevel: Customer lifecycle order
+    loyalty_mapping = {
+        'Nouveau': 0,      # New customer
+        'Jeune': 1,        # Young relationship
+        'Établi': 2,       # Established
+        'Ancien': 3        # Old/Long-term
+    }
+    df['LoyaltyLevel'] = df['LoyaltyLevel'].map(loyalty_mapping)
 
+    # 2. AgeCategory: Age order (Inconnu first, then ascending)
+    age_mapping = {
+        'Inconnu': 0,
+        '18-24': 1,
+        '25-34': 2,
+        '35-44': 3,
+        '45-54': 4,
+        '55-64': 5,
+        '65+': 6
+    }
+    df['AgeCategory'] = df['AgeCategory'].map(age_mapping)
+
+    # 3. SpendingCategory: Low to High
+    spending_mapping = {
+        'Low': 0,
+        'Medium': 1,
+        'High': 2,
+        'VIP': 3
+    }
+    df['SpendingCategory'] = df['SpendingCategory'].map(spending_mapping)
+
+    # 4. ChurnRiskCategory: Risk level (Faible=Low to Critique=Critical)
+    churn_risk_mapping = {
+        'Faible': 0,
+        'Moyen': 1,
+        'Élevé': 2,
+        'Critique': 3
+    }
+    df['ChurnRiskCategory'] = df['ChurnRiskCategory'].map(churn_risk_mapping)
+
+    # 5. BasketSizeCategory: Size order (Petit=Small to Grand=Large)
+    basket_mapping = {
+        'Petit': 0,
+        'Moyen': 1,
+        'Grand': 2
+    }
+    df['BasketSizeCategory'] = df['BasketSizeCategory'].map(basket_mapping)
+
+    # 6. ProductDiversity: Specialization level (Spécialisé=Focused to Explorateur=Explorer)
+    diversity_mapping = {
+        'Spécialisé': 0,   # Buys few product types
+        'Modéré': 1,       # Moderate variety
+        'Explorateur': 2   # Buys many different products
+    }
+    df['ProductDiversity'] = df['ProductDiversity'].map(diversity_mapping)
+
+    # 7. RFMSegment: Customer value segments (Dormants=Low to Champions=High)
+    rfm_mapping = {
+        'Dormants': 0,     # Inactive
+        'Potentiels': 1,   # Potential
+        'Fidèles': 2,      # Loyal
+        'Champions': 3     # Best customers
+    }
+    df['RFMSegment'] = df['RFMSegment'].map(rfm_mapping)
+
+    print("✅ Manual encoding completed!")
+    print("Checking for any unmapped (NaN) values...")
+    for col in ['LoyaltyLevel', 'AgeCategory', 'SpendingCategory', 
+                'ChurnRiskCategory', 'BasketSizeCategory', 'ProductDiversity', 'RFMSegment']:
+        if df[col].isnull().sum() > 0:
+            print(f"WARNING: {col} has {df[col].isnull().sum()} unmapped values!")
+        else:
+            print(f"✅ {col}: OK")
+        
+    # print("--------------testing dataset--------------")
+    # print(df.shape)
+    # print(df.dtypes)
+    # print(df.isnull().sum().sum())
 
     return df
 
