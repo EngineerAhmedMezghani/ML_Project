@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import ipaddress
-
+from sklearn.preprocessing import LabelEncoder
 def load_and_process_data():
     df=pd.read_csv("data/raw/retail_customers_COMPLETE_CATEGORICAL.csv")
         
@@ -10,6 +10,8 @@ def load_and_process_data():
     df=pd.read_csv("data/raw/retail_customers_COMPLETE_CATEGORICAL.csv")
 
     print(df.head())
+    for col in df.columns:
+        print(f"{col}: {df[col].dtype}")
     print("number of rows is :",len(df.index))
 
     print("----------------fixing age column...------------------\n")
@@ -182,6 +184,76 @@ def load_and_process_data():
     df.drop(columns=["AccountStatus"], inplace=True)
     df.drop(columns=["CustomerID"], inplace=True)
     df.drop(columns=["RegistrationDate"], inplace=True)
+
+
+
+    print("------------------------Encoding------------------------")
+    print("-----------Gender Encoding-----------")
+
+    mapping = {'M': 0, 'F': 1}
+    # Application du mapping (Unknown deviendra NaN par défaut)
+    df['Gender_encoded'] = df['Gender'].map(mapping)
+    df.drop(columns=["Gender"], inplace=True)
+    
+    print("-----------Region Encoding-----------")
+    mapping = {'UK': 0, 'Europe continentale': 1, 'Océanie': 2, 'Europe du Nord': 3, 'Autre': 4,
+    'Europe centrale': 5, 'Europe du Sud': 5, "Europe de l'Est": 5, 'Asie': 4, 'Moyen-Orient': 4,
+    'Amérique du Nord': 6, 'Amérique du Sud': 6, 'Afrique': 4}
+    # Application du mapping (Unknown deviendra NaN par défaut)
+    df['Region_encoded'] = df['Region'].map(mapping)
+    df.drop(columns=["Region"], inplace=True)
+
+    print("-----------Favorite Season Encoding-----------")
+    print(df["FavoriteSeason"].value_counts())
+    mapping = {'Automne': 0, 'Hiver': 1, 'Printemps': 2, 'Été': 3}
+    df['FavoriteSeason_encoded'] = df['FavoriteSeason'].map(mapping)
+    df.drop(columns=["FavoriteSeason"], inplace=True)
+
+    print("-----------Preferred Time of Day Encoding-----------")
+    print("PreferredTimeOfDay value counts:",df["PreferredTimeOfDay"].value_counts())
+    mapping = {'Matin': 0, 'Midi': 1, 'Après-midi': 2, 'Soir': 3}
+    df['PreferredTimeOfDay_encoded'] = df['PreferredTimeOfDay'].map(mapping)
+    df.drop(columns=["PreferredTimeOfDay"], inplace=True)
+
+    print("------------WeekendPreference-----------------------")
+    print("WeekendPreference value counts:",df["WeekendPreference"].value_counts())
+    mapping = {'Inconnu': 0, 'Semaine': 1, 'Weekend': 2}
+    df['WeekendPreference_encoded'] = df['WeekendPreference'].map(mapping)
+    df.drop(columns=["WeekendPreference"], inplace=True)
+
+    print("-----------Customer Type Encoding-----------")
+    print("CustomerType value counts:",df["CustomerType"].value_counts())
+    mapping = {'Occasionnel': 0, 'Nouveau': 1, 'Perdu': 2, 'Régulier': 3, 'Hyperactif': 4}
+    df['CustomerType_encoded'] = df['CustomerType'].map(mapping)
+    df.drop(columns=["CustomerType"], inplace=True)
+
+    print("----------------Country Encoding----------------")
+    print("Country feature is dropped")
+    df.drop(columns=["Country"], inplace=True)
+
+
+
+
+    print("--------------LABEL ENCODING (ordered features)--------------")
+    label_cols = [
+        "LoyaltyLevel",
+        "AgeCategory",
+        "SpendingCategory",
+        "ChurnRiskCategory",
+        "BasketSizeCategory",
+        "ProductDiversity",
+        "RFMSegment"
+    ]
+    le_dict = {}
+
+    for col in label_cols:
+        df[col] = df[col].astype(str)  # safety step
+
+        le = LabelEncoder()
+        df[col] = le.fit_transform(df[col])
+
+        le_dict[col] = le  # store encoders for future use
+
 
     return df
 
