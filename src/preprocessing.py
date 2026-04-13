@@ -180,7 +180,8 @@ def load_and_process_data():
     print(df["AccountStatus"].value_counts(normalize=True))
     #we will drop the account status column
     df.drop(columns=["AccountStatus"], inplace=True)
-
+    df.drop(columns=["CustomerID"], inplace=True)
+    df.drop(columns=["RegistrationDate"], inplace=True)
 
     return df
 
