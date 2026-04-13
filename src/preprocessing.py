@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import ipaddress
 
 def load_and_process_data():
     df=pd.read_csv("data/raw/retail_customers_COMPLETE_CATEGORICAL.csv")
@@ -9,7 +10,7 @@ def load_and_process_data():
     df=pd.read_csv("data/raw/retail_customers_COMPLETE_CATEGORICAL.csv")
 
     print(df.head())
-    print(len(df.columns))
+    print("number of rows is :",len(df.index))
 
     print("----------------fixing age column...------------------\n")
     print(df["Age"].isnull().value_counts())
@@ -85,10 +86,94 @@ def load_and_process_data():
     print("----------------LastLoginIP------------------")
     print("unique values:")
     print(len(df["LastLoginIP"].unique()))
+    print(df["LastLoginIP"].head())
 
     print("----------------AccountStatus, Churn------------------")
-    return df
+    print(df.columns.unique())
+    print(df["AccountStatus"].head(30))
+    print("unique values:")
+    print(len(df["AccountStatus"].unique()))
+    print("possible values of AccountStatus:", sorted(df["AccountStatus"].unique()))
+    print("frequencies of AccountStatus:")
+    print(df["AccountStatus"].value_counts())
 
+
+    df['MonetaryPerDay'] = df['MonetaryTotal'] / (df['Recency'] + 1)
+
+    # Panier moyen
+    df['AvgBasketValue'] = df['MonetaryTotal'] / df['Frequency']
+
+    # Anciennete vs activite recente
+    df['TenureRatio'] = df['Recency'] / df['CustomerTenureDays']
+
+
+    df.drop(columns=["MonetaryTotal", "Recency", "Frequency", "CustomerTenureDays"], inplace=True)
+
+
+    print("----------------LastLoginIP GeoIP preprocessing------------------")
+    def ip_to_int(ip):
+        try:
+            return int(ipaddress.IPv4Address(ip))
+        except:
+            return None
+
+
+    def cidr_to_range(cidr):
+        net = ipaddress.ip_network(cidr, strict=False)
+        return int(net.network_address), int(net.broadcast_address)
+    print("----------------GeoIP Country Mapping (CSV version)------------------")
+
+    # Load GeoLite CSV files
+    blocks = pd.read_csv("data/external/GeoLite2-Country-Blocks-IPv4.csv")
+    locations = pd.read_csv("data/external/GeoLite2-Country-Locations-en.csv")
+
+    # Keep only necessary columns
+    blocks = blocks[["network", "geoname_id"]]
+    locations = locations[["geoname_id", "country_iso_code"]]
+
+    # Merge datasets
+    geo_df = blocks.merge(locations, on="geoname_id", how="left")
+
+    # Convert CIDR → IP range
+    geo_df["ip_start"] = geo_df["network"].apply(lambda x: cidr_to_range(x)[0])
+    geo_df["ip_end"] = geo_df["network"].apply(lambda x: cidr_to_range(x)[1])
+
+    print("GeoIP dataset loaded:", geo_df.shape)
+
+
+    # Function to map IP → country
+    def get_country(ip):
+        ip_int = ip_to_int(ip)
+        if ip_int is None:
+            return "UNK"
+
+        match = geo_df[(geo_df["ip_start"] <= ip_int) & (geo_df["ip_end"] >= ip_int)]
+
+        if match.empty:
+            return "UNK"
+
+        return match.iloc[0]["country_iso_code"]
+
+
+    # Apply mapping
+    df["Country"] = df["LastLoginIP"].apply(get_country)
+
+    # Encode country (ML friendly)
+    df["Country"] = df["Country"].astype("category")
+    df["Country_encoded"] = df["Country"].cat.codes
+
+    # Frequency encoding (VERY useful feature)
+    country_freq = df["Country"].value_counts(normalize=True)
+    df["Country_freq"] = df["Country"].map(country_freq)
+
+    # Drop original column
+    df.drop(columns=["LastLoginIP", "Country"], inplace=True)
+
+    print("Country feature engineering done")
+    print(df[["Country_encoded", "Country_freq"]].head())
+
+
+    return df
 
 
 if __name__ == "__main__":
@@ -96,3 +181,7 @@ if __name__ == "__main__":
     df_processed = load_and_process_data()
     df_processed.to_csv("data/processed/retail_customers_processed.csv", index=False)
     print("Processed dataset saved to data/processed/retail_customers_processed.csv")
+    # print(df_processed.head())
+    # print("number of rows is :",len(df_processed.index))
+    # print(df_processed.columns.unique())
+    #print(df_processed["Churn"].value_counts())
