@@ -11,7 +11,9 @@ def load_and_process_data():
     for col in df.columns:
         print(f"{col}: {df[col].dtype}")
     print("number of rows is :",len(df.index))
+    return df
 
+def fix_age_column(df):
     print("----------------fixing age column...------------------\n")
     print(df["Age"].isnull().value_counts())
 
@@ -26,10 +28,9 @@ def load_and_process_data():
     df['Age'] = df['Age'].fillna(df['Age'].mean())
     print(df["Age"].isnull().value_counts())
     print("column age is now filled with mean values")
+    return df
 
-
-
-
+def fix_support_tickets_and_satisfaction(df):
     print("----------------SupportTickets, Satisfaction------------------\n")
 
 
@@ -61,33 +62,104 @@ def load_and_process_data():
     print("value counts SatisfactionScore:\n", df["SatisfactionScore"].value_counts())
     skewness = df['SatisfactionScore'].skew()
     print("Skewness of SatisfactionScore after mode", skewness)
+    return df
 
+def parse_date_robust(date_str):
+    """Parse dates in multiple formats. Returns pd.Timestamp or pd.NaT."""
+    if pd.isna(date_str):
+        return pd.NaT
+    
+    date_str = str(date_str).strip()
+    
+    # Format: YYYY-MM-DD (ISO format)
+    try:
+        return pd.to_datetime(date_str, format='%Y-%m-%d')
+    except:
+        pass
+    
+    # Format: DD/MM/YYYY or DD/MM/YY (European)
+    try:
+        return pd.to_datetime(date_str, format='%d/%m/%Y')
+    except:
+        try:
+            return pd.to_datetime(date_str, format='%d/%m/%y')
+        except:
+            pass
+    
+    # Format: MM/DD/YYYY (US format)
+    try:
+        return pd.to_datetime(date_str, format='%m/%d/%Y')
+    except:
+        pass
+    
+    # Format: MM/DD/YY (US short format)
+    try:
+        return pd.to_datetime(date_str, format='%m/%d/%y')
+    except:
+        pass
+    
+    # Last resort: let pandas infer
+    try:
+        return pd.to_datetime(date_str, dayfirst=True)
+    except:
+        return pd.NaT
+
+def fix_AvgDaysBetweenPurchases(df):
+    df.drop("AvgDaysBetweenPurchases", axis=1, inplace=True)
+    return df
+
+def fix_registration_date(df):
     print("----------------registration date------------------")
-    print(df["RegistrationDate"].head())
-    # Convert RegistrationDate to datetime with day first
-    df["RegistrationDate"] = pd.to_datetime(
-        df["RegistrationDate"], 
-        format="%d/%m/%y",  # day/month/two-digit year
-        errors="coerce"
-    )
+    print("Sample values:", df["RegistrationDate"].head(10).tolist())
+    
+    # Count missing before
+    missing_before = df["RegistrationDate"].isna().sum()
+    print(f"Missing values before parsing: {missing_before}")
+    
+    # Apply robust parsing
+    df["RegistrationDate"] = df["RegistrationDate"].apply(parse_date_robust)
+    
+    # Count missing after parsing
+    missing_after = df["RegistrationDate"].isna().sum()
+    parsed_count = len(df) - missing_after
+    print(f"Successfully parsed: {parsed_count} / {len(df)}")
+    print(f"Still missing: {missing_after}")
+    
+    # Extract components (will be NaN for NaT dates)
     df["RegistrationDate_day"] = df["RegistrationDate"].dt.day
     df["RegistrationDate_month"] = df["RegistrationDate"].dt.month
     df["RegistrationDate_year"] = df["RegistrationDate"].dt.year
-    print(df[["RegistrationDate", "RegistrationDate_day", "RegistrationDate_month", "RegistrationDate_year"]])
+    
+    # Fill missing dates with median values
+    if missing_after > 0:
+        median_day = int(df["RegistrationDate_day"].median())
+        median_month = int(df["RegistrationDate_month"].median())
+        median_year = int(df["RegistrationDate_year"].median())
+        
+        df["RegistrationDate_day"] = df["RegistrationDate_day"].fillna(median_day)
+        df["RegistrationDate_month"] = df["RegistrationDate_month"].fillna(median_month)
+        df["RegistrationDate_year"] = df["RegistrationDate_year"].fillna(median_year)
+        
+        print(f"Filled missing with median: day={median_day}, month={median_month}, year={median_year}")
+    
+    df.drop(columns=["RegistrationDate"], inplace=True)
+    return df
 
-
-
+def fix_newsletter_subscribed(df):
     print("----------------NewsletterSubscribed------------------")
     df.drop(columns=["NewsletterSubscribed"], inplace=True)
     print(df.describe())
     print(len(df.columns))
+    return df
 
-
+def fix_last_login_ip(df):
     print("----------------LastLoginIP------------------")
     print("unique values:")
     print(len(df["LastLoginIP"].unique()))
     print(df["LastLoginIP"].head())
+    return df
 
+def fix_account_status_and_churn(df):
     print("----------------AccountStatus, Churn------------------")
     print(df.columns.unique())
     print(df["AccountStatus"].head(30))
@@ -96,80 +168,71 @@ def load_and_process_data():
     print("possible values of AccountStatus:", sorted(df["AccountStatus"].unique()))
     print("frequencies of AccountStatus:")
     print(df["AccountStatus"].value_counts())
+    return df
+
+def geoip_numeric_feature_engineering(df):
+    print("----------------GeoIP Numeric Feature Engineering------------------")
+
+    import ipaddress
+
+    def ip_to_int(ip):
+        try:
+            return int(ipaddress.IPv4Address(ip))
+        except:
+            return None
+    return df
 
 
-    df['MonetaryPerDay'] = df['MonetaryTotal'] / (df['Recency'] + 1)
-
-    # Panier moyen
-    df['AvgBasketValue'] = df['MonetaryTotal'] / df['Frequency']
-
-    # Anciennete vs activite recente
-    df['TenureRatio'] = df['Recency'] / df['CustomerTenureDays']
+    def cidr_to_range(cidr):
+        net = ipaddress.ip_network(cidr, strict=False)
+        return int(net.network_address), int(net.broadcast_address)
 
 
-    df.drop(columns=["MonetaryTotal", "Recency", "Frequency", "CustomerTenureDays"], inplace=True)
+    # Load datasets
+    blocks = pd.read_csv("data/external/GeoLite2-Country-Blocks-IPv4.csv")
+    locations = pd.read_csv("data/external/GeoLite2-Country-Locations-en.csv")
+
+    # Keep only needed columns
+    blocks = blocks[["network", "geoname_id"]]
+    locations = locations[["geoname_id", "country_iso_code"]]
+
+    # Merge
+    geo_df = blocks.merge(locations, on="geoname_id", how="left")
+
+    # Convert CIDR → range
+    geo_df["ip_start"] = geo_df["network"].apply(lambda x: cidr_to_range(x)[0])
+    geo_df["ip_end"] = geo_df["network"].apply(lambda x: cidr_to_range(x)[1])
 
 
-    # print("----------------GeoIP Numeric Feature Engineering------------------")
+    def get_country(ip):
+        ip_int = ip_to_int(ip)
+        if ip_int is None:
+            return "UNK"
 
-    # import ipaddress
+        match = geo_df[(geo_df["ip_start"] <= ip_int) & (geo_df["ip_end"] >= ip_int)]
 
-    # def ip_to_int(ip):
-    #     try:
-    #         return int(ipaddress.IPv4Address(ip))
-    #     except:
-    #         return None
+        if match.empty:
+            return "UNK"
 
+        return match.iloc[0]["country_iso_code"]
 
-    # def cidr_to_range(cidr):
-    #     net = ipaddress.ip_network(cidr, strict=False)
-    #     return int(net.network_address), int(net.broadcast_address)
+def map_ip_to_country(df):
+    # Map IP → country code
+    df["Country"] = df["LastLoginIP"].apply(get_country)
 
+    # Convert directly to numeric features
+    df["Country"] = df["Country"].astype("category")
+    df["Country_encoded"] = df["Country"].cat.codes
 
-    # # Load datasets
-    # blocks = pd.read_csv("data/external/GeoLite2-Country-Blocks-IPv4.csv")
-    # locations = pd.read_csv("data/external/GeoLite2-Country-Locations-en.csv")
+    country_freq = df["Country"].value_counts(normalize=True)
+    df["Country_freq"] = df["Country"].map(country_freq)
 
-    # # Keep only needed columns
-    # blocks = blocks[["network", "geoname_id"]]
-    # locations = locations[["geoname_id", "country_iso_code"]]
+    # FINAL CLEANUP → remove redundancy
+    df.drop(columns=["LastLoginIP", "Country"], inplace=True)
 
-    # # Merge
-    # geo_df = blocks.merge(locations, on="geoname_id", how="left")
-
-    # # Convert CIDR → range
-    # geo_df["ip_start"] = geo_df["network"].apply(lambda x: cidr_to_range(x)[0])
-    # geo_df["ip_end"] = geo_df["network"].apply(lambda x: cidr_to_range(x)[1])
-
-
-    # def get_country(ip):
-    #     ip_int = ip_to_int(ip)
-    #     if ip_int is None:
-    #         return "UNK"
-
-    #     match = geo_df[(geo_df["ip_start"] <= ip_int) & (geo_df["ip_end"] >= ip_int)]
-
-    #     if match.empty:
-    #         return "UNK"
-
-    #     return match.iloc[0]["country_iso_code"]
-
-
-    # # Map IP → country code
-    # df["Country"] = df["LastLoginIP"].apply(get_country)
-
-    # # Convert directly to numeric features
-    # df["Country"] = df["Country"].astype("category")
-    # df["Country_encoded"] = df["Country"].cat.codes
-
-    # country_freq = df["Country"].value_counts(normalize=True)
-    # df["Country_freq"] = df["Country"].map(country_freq)
-
-    # # FINAL CLEANUP → remove redundancy
-    # df.drop(columns=["LastLoginIP", "Country"], inplace=True)
-
-    # print("Final numeric features added successfully")
-    # print(df[["Country_encoded", "Country_freq"]].head())
+    print("Final numeric features added successfully")
+    print(df[["Country_encoded", "Country_freq"]].head())
+    return df
 
     print("----------------Class imbalance check------------------")
 
@@ -181,16 +244,22 @@ def load_and_process_data():
     #we will drop the account status column
     df.drop(columns=["AccountStatus"], inplace=True)
     df.drop(columns=["CustomerID"], inplace=True)
-    df.drop(columns=["RegistrationDate"], inplace=True)
+    
 
-
-
+def encoding(df):
     print("------------------------Encoding------------------------")
-    print("-----------Gender Encoding-----------")
-
-    mapping = {'M': 0, 'F': 1}
-    # Application du mapping (Unknown deviendra NaN par défaut)
+    # Include Unknown in mapping (-1 = unknown/missing)
+    mapping = {'M': 0, 'F': 1, 'Unknown': -1}
     df['Gender_encoded'] = df['Gender'].map(mapping)
+
+    # Verify no NaN
+    if df['Gender_encoded'].isnull().sum() > 0:
+        print(f"WARNING: {df['Gender_encoded'].isnull().sum()} unmapped gender values")
+        df['Gender_encoded'].fillna(-1, inplace=True)  # Safety fill
+
+    print("Gender value counts:")
+    print(df['Gender_encoded'].value_counts().sort_index())
+
     df.drop(columns=["Gender"], inplace=True)
     
     print("-----------Region Encoding-----------")
@@ -225,9 +294,7 @@ def load_and_process_data():
     df['CustomerType_encoded'] = df['CustomerType'].map(mapping)
     df.drop(columns=["CustomerType"], inplace=True)
 
-    print("----------------Country Encoding----------------")
-    print("Country feature is dropped")
-    df.drop(columns=["Country"], inplace=True)
+
 
 
 
@@ -320,20 +387,68 @@ def load_and_process_data():
         else:
             print(f"✅ {col}: OK")
         
-    # print("--------------testing dataset--------------")
-    # print(df.shape)
-    # print(df.dtypes)
-    # print(df.isnull().sum().sum())
+    print("--------------testing dataset--------------")
+    print(df.shape)
+    print(df.dtypes)
+    print(df.isnull().sum().sum())
+
+    # print("Features:", X.shape)
+    # print("Target:", y.shape)
+    # print(X.isnull().sum().sum())
+    # print(y.value_counts(normalize=True))
+    return df
+
+def feature_engineering(df):
+    print("----------------feature engineering------------------")
+    # Drop perfect multicollinearity beacuse correlation is almost 1
+    df.drop(columns=['UniqueDescriptions', 'UniqueInvoices', 'AvgLinesPerInvoice'], inplace=True)
+
+    # 1. Daily spending velocity (monetary efficiency)
+    df['MonetaryPerDay'] = df['MonetaryTotal'] / (df['Recency'] + 1)
+
+    # 2. Average basket value (order value)
+    df['AvgBasketValue'] = df['MonetaryTotal'] / df['Frequency']
+
+    # 3. Recency vs Tenure ratio (customer activity trend)
+    # Values close to 0 = very active; close to 1 = inactive despite long history
+    df['TenureRatio'] = df['Recency'] / (df['CustomerTenureDays'] + 1)
+
+    # 4. Product diversity per transaction (variety buyer vs bulk buyer)
+    df['ProductDiversityPerTrans'] = df['UniqueProducts'] / df['Frequency']
+
+    # 5. Return/Complaint intensity (negative behavior normalized)
+    df['ReturnIntensity'] = df['ReturnRatio'] * df['Frequency']  # Total returns weighted by activity
+
+
+    df.drop(columns=['MonetaryTotal', 'Frequency', 'UniqueProducts', 'ReturnRatio', 'CustomerTenureDays', 'Recency', ], inplace=True)
+    print(len(df.columns))
 
     return df
 
 
-if __name__ == "__main__":
+def main():
     # When running as a script, save the processed dataset
     df_processed = load_and_process_data()
     df_processed.to_csv("data/processed/retail_customers_processed.csv", index=False)
     print("Processed dataset saved to data/processed/retail_customers_processed.csv")
-    # print(df_processed.head())
-    # print("number of rows is :",len(df_processed.index))
-    # print(df_processed.columns.unique())
-    #print(df_processed["Churn"].value_counts())
+    print(df_processed["Gender"].value_counts())
+    df_processed=fix_age_column(df_processed)
+    df_processed=fix_support_tickets_and_satisfaction(df_processed)
+    df_processed=fix_registration_date(df_processed)
+    df_processed=fix_newsletter_subscribed(df_processed)
+    df_processed=fix_AvgDaysBetweenPurchases(df_processed)
+    df_processed=fix_last_login_ip(df_processed)
+    df_processed=geoip_numeric_feature_engineering(df_processed)
+    df_processed=encoding(df_processed)
+    df_processed=fix_account_status_and_churn(df_processed)
+    df_processed=feature_engineering(df_processed)
+
+
+    df_processed.to_csv("data/processed/retail_customers_processed.csv", index=False)
+    print("Processed dataset saved to data/processed/retail_customers_processed.csv")
+
+    print(df_processed.isnull().sum())
+
+
+if __name__ == "__main__":
+    main()
