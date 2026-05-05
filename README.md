@@ -1,5 +1,9 @@
 # Analyse Comportementale Clientèle – Atelier Machine Learning (GI2)
 
+## Liens du rapport et de présentation 
+rapport => reports\Rapport Final ML.pdf
+présentation =>
+
 ## Contexte & Mission
 
 Ce projet est un atelier pratique de Machine Learning réalisé dans le cadre du module ML (GI2). Il simule une mission de **Data Scientist** au sein d'une entreprise e-commerce de cadeaux. L'objectif est d'analyser une base de données complexe de **52 features** issues de transactions réelles afin de :
