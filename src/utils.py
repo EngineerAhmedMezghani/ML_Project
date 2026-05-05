@@ -310,7 +310,11 @@ if __name__ == "__main__":
     
     # Load preprocessed data (feature engineering already done in preprocessing.py)
     df = pd.read_csv("data/processed/retail_customers_processed.csv")
+    
     print(f"Loaded {len(df.columns)} features from processed data")
+
+    
+    
     
     # Generate correlation analysis
     print("\n" + "="*70)
@@ -328,3 +332,46 @@ if __name__ == "__main__":
     print("="*70)
     plot_correlation_heatmap_highlights(df, threshold=0.8,
                                          save_path='outputs/correlation_highlights.png')
+
+    recommendations = recommend_features_to_drop(df, corr_threshold=0.8, vif_threshold=10.0)
+    features_to_drop = recommendations['recommended_drops_correlation']
+    print(f"\nFeatures recommended to drop: {features_to_drop}")
+    # Actually drop them
+    df_cleaned = df.drop(columns=features_to_drop)
+    
+    print(f"Removed {len(features_to_drop)} features.")
+    print(f"Before: {len(df.columns)} columns | After: {len(df_cleaned.columns)} columns")
+
+    # Save the cleaned dataset
+    cleaned_path = 'data/processed/retail_customers_processed.csv'
+    df_cleaned.to_csv(cleaned_path, index=False)
+    print(f"Saved cleaned data -> {cleaned_path}")
+
+    
+
+
+
+    # Generate correlation analysis
+    print("\n" + "="*70)
+    print("GENERATING CORRELATION MATRIX HEATMAP")
+    print("="*70)
+    plot_correlation_matrix(df_cleaned, save_path='outputs/correlation_matrix_cleaned.png')
+
+    print("\n" + "="*70)
+    print("MULTICOLLINEARITY REPORT")
+    print("="*70)
+    print_multicollinearity_report(df_cleaned, corr_threshold=0.8, vif_threshold=10.0)
+
+    print("\n" + "="*70)
+    print("GENERATING HIGH CORRELATION HIGHLIGHT HEATMAP")
+    print("="*70)
+    plot_correlation_heatmap_highlights(df_cleaned, threshold=0.8,
+                                         save_path='outputs/correlation_highlights_cleaned.png')
+
+
+
+    print(len(df_cleaned.columns))
+    for col in df_cleaned.columns:
+        print(col, df_cleaned[col].dtype)
+    
+

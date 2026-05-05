@@ -1,5 +1,5 @@
 MODEL COMPARISON RESULTS (logged to MLflow)
 ========================================
-LogisticRegression: ROC-AUC = 0.994 <- DEPLOYED
-GradientBoosting: ROC-AUC = 0.994
-RandomForest: ROC-AUC = 0.991
+GradientBoosting: ROC-AUC = 0.994 <- DEPLOYED
+RandomForest: ROC-AUC = 0.993
+LogisticRegression: ROC-AUC = 0.989

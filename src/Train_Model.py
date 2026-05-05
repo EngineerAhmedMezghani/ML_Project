@@ -42,7 +42,7 @@ def log_model_with_mlflow(model, model_name, X_train, X_test, y_train, y_test, p
         mlflow.log_metric("roc_auc", roc_auc)
         
         # Log model
-        mlflow.sklearn.log_model(model, artifact_path="model")
+        mlflow.sklearn.log_model(model, artifact_path="model", registered_model_name=model_name)
         
         # Print results
         print(f"\n{'='*50}")

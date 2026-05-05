@@ -1,6 +1,12 @@
-pandas 
+pandas
+joblib
 numpy
 matplotlib
 seaborn
 scipy
 geoip2
+python-dotenv
+requests
+flask
+flask-cors
+scikit-learn

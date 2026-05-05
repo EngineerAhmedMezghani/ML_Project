@@ -6,7 +6,6 @@ def load_and_process_data():
     df=pd.read_csv("data/raw/retail_customers_COMPLETE_CATEGORICAL.csv")
         
     print("---------------- exploring the data... ----------------\n")
-
     print(df.head())
     for col in df.columns:
         print(f"{col}: {df[col].dtype}")
@@ -152,115 +151,53 @@ def fix_newsletter_subscribed(df):
     print(len(df.columns))
     return df
 
-def fix_last_login_ip(df):
-    print("----------------LastLoginIP------------------")
-    print("unique values:")
-    print(len(df["LastLoginIP"].unique()))
-    print(df["LastLoginIP"].head())
+def extract_ip_features(df, ip_col='LastLoginIP'):
+    print("----------------Extracting IP Features------------------")
+    """
+    Extrait uniquement IsPrivateIP et IsSharedSubnet depuis LastLoginIP.
+    """
+    df = df.copy()
+    
+    # 1. IsPrivateIP
+    df['IsPrivateIP'] = df[ip_col].apply(
+        lambda x: ipaddress.ip_address(x).is_private if pd.notna(x) else False
+    )
+    print("---------IsPrivateIP---------")
+    print(df['IsPrivateIP'].value_counts())
+    df.drop(columns=["LastLoginIP"], inplace=True) 
+    print("IsPrivateIP vs Churn:")
+    print(pd.crosstab(df["IsPrivateIP"], df["Churn"], normalize='index'))
+       
     return df
 
 def fix_account_status_and_churn(df):
     print("----------------AccountStatus, Churn------------------")
-    print(df.columns.unique())
-    print(df["AccountStatus"].head(30))
     print("unique values:")
     print(len(df["AccountStatus"].unique()))
     print("possible values of AccountStatus:", sorted(df["AccountStatus"].unique()))
     print("frequencies of AccountStatus:")
     print(df["AccountStatus"].value_counts())
-    return df
-
-def geoip_numeric_feature_engineering(df):
-    print("----------------GeoIP Numeric Feature Engineering------------------")
-
-    import ipaddress
-
-    def ip_to_int(ip):
-        try:
-            return int(ipaddress.IPv4Address(ip))
-        except:
-            return None
+    print("AccountStatus vs Churn:")
+    print(pd.crosstab(df["AccountStatus"], df["Churn"], normalize='index'))
+    df['AccountStatus'] = df['AccountStatus'].replace(
+        ['Suspended', 'Pending', 'Closed'], 'Inactive'
+    )
+    print("AccountStatus after replacement:")
+    print(df["AccountStatus"].value_counts())
     return df
 
 
-    def cidr_to_range(cidr):
-        net = ipaddress.ip_network(cidr, strict=False)
-        return int(net.network_address), int(net.broadcast_address)
-
-
-    # Load datasets
-    blocks = pd.read_csv("data/external/GeoLite2-Country-Blocks-IPv4.csv")
-    locations = pd.read_csv("data/external/GeoLite2-Country-Locations-en.csv")
-
-    # Keep only needed columns
-    blocks = blocks[["network", "geoname_id"]]
-    locations = locations[["geoname_id", "country_iso_code"]]
-
-    # Merge
-    geo_df = blocks.merge(locations, on="geoname_id", how="left")
-
-    # Convert CIDR → range
-    geo_df["ip_start"] = geo_df["network"].apply(lambda x: cidr_to_range(x)[0])
-    geo_df["ip_end"] = geo_df["network"].apply(lambda x: cidr_to_range(x)[1])
-
-
-    def get_country(ip):
-        ip_int = ip_to_int(ip)
-        if ip_int is None:
-            return "UNK"
-
-        match = geo_df[(geo_df["ip_start"] <= ip_int) & (geo_df["ip_end"] >= ip_int)]
-
-        if match.empty:
-            return "UNK"
-
-        return match.iloc[0]["country_iso_code"]
-
-def map_ip_to_country(df):
-    # Map IP → country code
-    df["Country"] = df["LastLoginIP"].apply(get_country)
-
-    # Convert directly to numeric features
-    df["Country"] = df["Country"].astype("category")
-    df["Country_encoded"] = df["Country"].cat.codes
-
-    country_freq = df["Country"].value_counts(normalize=True)
-    df["Country_freq"] = df["Country"].map(country_freq)
-
-    # FINAL CLEANUP → remove redundancy
-    df.drop(columns=["LastLoginIP", "Country"], inplace=True)
-
-    print("Final numeric features added successfully")
-    print(df[["Country_encoded", "Country_freq"]].head())
-    return df
-
-    print("----------------Class imbalance check------------------")
-
-    print("Churn distribution:")
-    print(df["Churn"].value_counts(normalize=True))
-
-    print("\nAccountStatus distribution:")
-    print(df["AccountStatus"].value_counts(normalize=True))
-    #we will drop the account status column
-    df.drop(columns=["AccountStatus"], inplace=True)
-    df.drop(columns=["CustomerID"], inplace=True)
-    
 
 def encoding(df):
     print("------------------------Encoding------------------------")
     # Include Unknown in mapping (-1 = unknown/missing)
-    mapping = {'M': 0, 'F': 1, 'Unknown': -1}
-    df['Gender_encoded'] = df['Gender'].map(mapping)
+    df = pd.get_dummies(df, columns=["Gender"], prefix="Gender", dummy_na=False)
+    print(df["Gender_F"].value_counts())
+    print("one hot encoding on Gender completed")
 
-    # Verify no NaN
-    if df['Gender_encoded'].isnull().sum() > 0:
-        print(f"WARNING: {df['Gender_encoded'].isnull().sum()} unmapped gender values")
-        df['Gender_encoded'].fillna(-1, inplace=True)  # Safety fill
-
-    print("Gender value counts:")
-    print(df['Gender_encoded'].value_counts().sort_index())
-
-    df.drop(columns=["Gender"], inplace=True)
+    df = pd.get_dummies(df, columns=["AccountStatus"], prefix="AccountStatus", dummy_na=False)
+    print(df["AccountStatus_Active"].value_counts())
+    print("one hot encoding on AccountStatus completed")
     
     print("-----------Region Encoding-----------")
     mapping = {'UK': 0, 'Europe continentale': 1, 'Océanie': 2, 'Europe du Nord': 3, 'Autre': 4,
@@ -268,36 +205,33 @@ def encoding(df):
     'Amérique du Nord': 6, 'Amérique du Sud': 6, 'Afrique': 4}
     # Application du mapping (Unknown deviendra NaN par défaut)
     df['Region_encoded'] = df['Region'].map(mapping)
+    df=pd.get_dummies(df, columns=["Region_encoded"], prefix="Region", dummy_na=False)
+    print("Region encoding completed")
     df.drop(columns=["Region"], inplace=True)
 
     print("-----------Favorite Season Encoding-----------")
     print(df["FavoriteSeason"].value_counts())
-    mapping = {'Automne': 0, 'Hiver': 1, 'Printemps': 2, 'Été': 3}
-    df['FavoriteSeason_encoded'] = df['FavoriteSeason'].map(mapping)
-    df.drop(columns=["FavoriteSeason"], inplace=True)
+    df = pd.get_dummies(df, columns=["FavoriteSeason"], prefix="Season", dummy_na=False)
+    print("Favorite Season encoding completed")
+    
 
     print("-----------Preferred Time of Day Encoding-----------")
     print("PreferredTimeOfDay value counts:",df["PreferredTimeOfDay"].value_counts())
-    mapping = {'Matin': 0, 'Midi': 1, 'Après-midi': 2, 'Soir': 3}
-    df['PreferredTimeOfDay_encoded'] = df['PreferredTimeOfDay'].map(mapping)
-    df.drop(columns=["PreferredTimeOfDay"], inplace=True)
+    df = pd.get_dummies(df, columns=["PreferredTimeOfDay"], prefix="TimeOfDay", dummy_na=False)
+    print("Preferred Time of Day encoding completed")
+    
 
     print("------------WeekendPreference-----------------------")
     print("WeekendPreference value counts:",df["WeekendPreference"].value_counts())
-    mapping = {'Inconnu': 0, 'Semaine': 1, 'Weekend': 2}
-    df['WeekendPreference_encoded'] = df['WeekendPreference'].map(mapping)
-    df.drop(columns=["WeekendPreference"], inplace=True)
+    df = pd.get_dummies(df, columns=["WeekendPreference"], prefix="Weekend", dummy_na=False)
+    print("WeekendPreference encoding completed")
+    
 
     print("-----------Customer Type Encoding-----------")
     print("CustomerType value counts:",df["CustomerType"].value_counts())
-    mapping = {'Occasionnel': 0, 'Nouveau': 1, 'Perdu': 2, 'Régulier': 3, 'Hyperactif': 4}
-    df['CustomerType_encoded'] = df['CustomerType'].map(mapping)
-    df.drop(columns=["CustomerType"], inplace=True)
-
-
-
-
-
+    df = pd.get_dummies(df, columns=["CustomerType"], prefix="CustomerType", dummy_na=False)
+    print("Customer Type encoding completed")
+    
 
     print("--------------LABEL ENCODING (ordered features)--------------")
     label_cols = [
@@ -322,6 +256,7 @@ def encoding(df):
         'Ancien': 3        # Old/Long-term
     }
     df['LoyaltyLevel'] = df['LoyaltyLevel'].map(loyalty_mapping)
+    print("LoyaltyLevel encoding completed")
 
     # 2. AgeCategory: Age order (Inconnu first, then ascending)
     age_mapping = {
@@ -334,6 +269,7 @@ def encoding(df):
         '65+': 6
     }
     df['AgeCategory'] = df['AgeCategory'].map(age_mapping)
+    print("AgeCategory encoding completed")
 
     # 3. SpendingCategory: Low to High
     spending_mapping = {
@@ -352,6 +288,7 @@ def encoding(df):
         'Critique': 3
     }
     df['ChurnRiskCategory'] = df['ChurnRiskCategory'].map(churn_risk_mapping)
+    print("ChurnRiskCategory encoding completed")
 
     # 5. BasketSizeCategory: Size order (Petit=Small to Grand=Large)
     basket_mapping = {
@@ -360,6 +297,7 @@ def encoding(df):
         'Grand': 2
     }
     df['BasketSizeCategory'] = df['BasketSizeCategory'].map(basket_mapping)
+    print("BasketSizeCategory encoding completed")
 
     # 6. ProductDiversity: Specialization level (Spécialisé=Focused to Explorateur=Explorer)
     diversity_mapping = {
@@ -368,6 +306,7 @@ def encoding(df):
         'Explorateur': 2   # Buys many different products
     }
     df['ProductDiversity'] = df['ProductDiversity'].map(diversity_mapping)
+    print("ProductDiversity encoding completed")
 
     # 7. RFMSegment: Customer value segments (Dormants=Low to Champions=High)
     rfm_mapping = {
@@ -378,7 +317,50 @@ def encoding(df):
     }
     df['RFMSegment'] = df['RFMSegment'].map(rfm_mapping)
 
-    print("✅ Manual encoding completed!")
+    # 8. Country
+    churn_risk_mapping = {
+    'United Kingdom':1,
+    'France':2,
+    'Australia':3,
+    'Netherlands':4,
+    'Germany':5,
+    'Norway':6,
+    'EIRE':7,
+    'Switzerland':8,
+    'Spain':9,
+    'Poland':10,
+    'Portugal':11,
+    'Italy':12,
+    'Belgium':13,
+    'Lithuania':14,
+    'Japan':15,
+    'Iceland':16,
+    'Channel Islands':17,
+    'Denmark':18,
+    'Cyprus':19,
+    'Sweden':20,
+    'Austria':21,
+    'Israel':22,
+    'Finland':23,
+    'Greece':24,
+    'Singapore':25,
+    'Lebanon':26,
+    'United Arab Emirates':27,
+    'Saudi Arabia':28,
+    'Czech Republic':29,
+    'Canada':30,
+    'Unspecified':40,
+    'Brazil':41,
+    'USA':42,
+    'European Community':43,
+    'Bahrain':44,
+    'Malta':45,
+    'RSA':46
+    }
+    df['Country'] = df['Country'].map(churn_risk_mapping)
+    print("Country encoding completed")
+
+    print("✅encoding completed!")
     print("Checking for any unmapped (NaN) values...")
     for col in ['LoyaltyLevel', 'AgeCategory', 'SpendingCategory', 
                 'ChurnRiskCategory', 'BasketSizeCategory', 'ProductDiversity', 'RFMSegment']:
@@ -431,17 +413,19 @@ def main():
     df_processed = load_and_process_data()
     df_processed.to_csv("data/processed/retail_customers_processed.csv", index=False)
     print("Processed dataset saved to data/processed/retail_customers_processed.csv")
-    print(df_processed["Gender"].value_counts())
+    df_processed.drop(columns=['CustomerID'], inplace=True)
     df_processed=fix_age_column(df_processed)
     df_processed=fix_support_tickets_and_satisfaction(df_processed)
     df_processed=fix_registration_date(df_processed)
     df_processed=fix_newsletter_subscribed(df_processed)
     df_processed=fix_AvgDaysBetweenPurchases(df_processed)
-    df_processed=fix_last_login_ip(df_processed)
-    df_processed=geoip_numeric_feature_engineering(df_processed)
-    df_processed=encoding(df_processed)
     df_processed=fix_account_status_and_churn(df_processed)
+    
+    df_processed=extract_ip_features(df_processed, ip_col="LastLoginIP")
+    df_processed=encoding(df_processed)
+    print(df_processed.columns)
     df_processed=feature_engineering(df_processed)
+    print(df_processed.columns)
 
 
     df_processed.to_csv("data/processed/retail_customers_processed.csv", index=False)

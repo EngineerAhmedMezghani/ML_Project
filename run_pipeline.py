@@ -35,8 +35,8 @@ def main():
     
     steps = [
         ("preprocessing.py", "Data Preprocessing & Feature Engineering"),
-        ("split_data.py", "Train/Test Split"),
         ("utils.py", "Correlation Analysis"),
+        ("split_data.py", "Train/Test Split"),
         ("pca_transform.py", "PCA Dimensionality Reduction"),
         ("Train_Model.py", "Model Training & Evaluation"),
     ]

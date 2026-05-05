@@ -15,5 +15,8 @@ build/
 .venv/*
 projet (1).pdf
 
-app_Vue
-
+app_Vue/node_modules/
+app_Vue/dist/
+app_Vue/package-lock.json
+mlruns/
+models/
